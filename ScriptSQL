@@ -1,0 +1,22 @@
+****
+##Esegui questo script nel database PS_UserData del server Shaiya (lo stesso dove si trova Users_Master)##
+USE PS_UserData;
+GO
+
+CREATE TABLE dbo.Donation_Log (
+    ID INT IDENTITY(1,1) PRIMARY KEY,
+    UserUID INT NOT NULL,
+    UserID NVARCHAR(50) NOT NULL,
+    AmountUSD DECIMAL(10,2) NOT NULL,
+    APGranted INT NOT NULL,
+    PayPalTxnID NVARCHAR(255) NOT NULL,
+    Status NVARCHAR(50) NOT NULL,
+    CreatedAt DATETIME DEFAULT GETDATE()
+);
+GO
+
+-- Indice per ricerche rapide per utente
+CREATE INDEX IX_DonationLog_UserUID
+    ON dbo.Donation_Log (UserUID);
+GO
+## Nota: mantieni la collation e il tipo di dati coerente con Users_Master (es. NVARCHAR(50) per UserID).
