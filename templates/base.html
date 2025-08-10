@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Shaiya Web{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='css/style.css') }}">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>Shaiya Server</h1>
+            <nav>
+                <ul>
+                    <li><a href="{{ url_for('register') }}">Registrati</a></li>
+                    <li><a href="{{ url_for('login') }}">Login</a></li>
+                    <li><a href="{{ url_for('profile') }}">Profilo</a></li>
+                    <li><a href="{{ url_for('pvp_rankings') }}">Classifiche PvP</a></li>
+                    <li><a href="{{ url_for('exp_rankings') }}">Classifiche Exp</a></li>
+                    <li><a href="{{ url_for('inventory') }}">Inventario</a></li>
+                    <li><a href="{{ url_for('shop') }}">Shop</a></li>
+                    <li><a href="{{ url_for('support') }}">Supporto</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        {% if message %}
+            <div class="alert alert-success">{{ message }}</div>
+        {% endif %}
+        {% if error %}
+            <div class="alert alert-error">{{ error }}</div>
+        {% endif %}
+
+        {% block content %}
+        <!-- Contenuto specifico della pagina -->
+        {% endblock %}
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>&copy; {{ now().year }} Shaiya Server - Tutti i diritti riservati</p>
+        </div>
+    </footer>
+</body>
+</html>
