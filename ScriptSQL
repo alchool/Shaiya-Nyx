@@ -20,3 +20,7 @@ CREATE INDEX IX_DonationLog_UserUID
     ON dbo.Donation_Log (UserUID);
 GO
 ## Nota: mantieni la collation e il tipo di dati coerente con Users_Master (es. NVARCHAR(50) per UserID).
+
+
+##Verifica la tabella su SQL Server
+SELECT * FROM PS_UserData.dbo.Donation_Log;
