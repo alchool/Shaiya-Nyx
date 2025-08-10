@@ -1,6 +1,9 @@
 # Shaiya-Nyx
 struttura di progetto completa (back-end in Python) per integrare un sito web con il database di Shaiya Essentials (MS SQL), includendo: registrazione account, login/profilo, classifiche PvP/EXP, visualizzazione inventario/PG, shop/donazioni (AP), e sistema ticket.
 
+# ALBERO DEL PROGETTO
+
+```
 shaiya-web-python/
 ├── README.md
 ├── requirements.txt
@@ -30,7 +33,6 @@ shaiya-web-python/
 │   └── profile.html
 └── static/
     └── css/
-
     # ISTRUZIONI RAPIDE
 
 1. Copiare `.env.example` -> `.env` e inserire la stringa di connessione a MS SQL (vedi sez. README).
