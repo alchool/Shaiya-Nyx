@@ -1,4 +1,4 @@
-****
+****SCRIPT DA ESEGUIRE SU SHELL
 ##Esegui questo script nel database PS_UserData del server Shaiya (lo stesso dove si trova Users_Master)##
 USE PS_UserData;
 GO
