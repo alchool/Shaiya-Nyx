@@ -14,6 +14,19 @@ class UserMaster(Base):
     Status = Column(Integer, default=0)
     RegDate = Column(DateTime, server_default=func.now())
 
+class User(Base):
+    __tablename__ = 'Users_Master'
+    __table_args__ = {'schema': 'dbo'}
+
+    UserUID = Column(Integer, primary_key=True, autoincrement=True)
+    UserID = Column(String(50), unique=True, nullable=False)
+    Pw = Column(String(255), nullable=False)
+    Email = Column(String(255), nullable=False)
+    Point = Column(Integer, default=0)
+
+    # Relazioni (esempio, se necessario)
+    # donations = relationship("DonationLog", back_populates="user")
+
 class Char(Base):
     __tablename__ = 'Chars'  # verificare schema e nome
     CharID = Column(Integer, primary_key=True)
