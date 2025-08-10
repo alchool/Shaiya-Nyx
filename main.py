@@ -7,9 +7,9 @@ from email.mime.text import MIMEText
 from datetime import datetime, timedelta
 from fastapi import BackgroundTasks
 from sqlalchemy.orm import Session
-from models import DonationLog
+from models import DonationLog, User # se User è definito
 import pyodbc
-import os
+import os, requests
 import secrets
 import smtplib
 
@@ -239,98 +239,76 @@ def inventory(request: Request, current_user: str = Depends(get_current_user)):
 def shop(request: Request, current_user: str = Depends(get_current_user)):
     return templates.TemplateResponse("shop.html", {"request": request})
 
-@app.post("/donate")
-def donate(
-    request: Request,
-    amount_usd: float = Form(...),
-    db: Session = Depends(get_db)
-):
-    """
-    Avvia pagamento PayPal sandbox e restituisce link approvazione
-    """
-    # Credenziali PayPal sandbox (variabili ambiente)
+from fastapi import Request, Form, Depends, HTTPException
+from fastapi.responses import RedirectResponse
+import os, requests
+from sqlalchemy.orm import Session
+from .database import get_db
+from .models import DonationLog, User  # se User è definito
+
+AP_RATE = int(os.getenv("AP_RATE", "100"))
+
+@app.post("/donate", response_model=dict)
+def donate(amount_usd: float = Form(...), db: Session = Depends(get_db), request: Request = Depends()):
     PAYPAL_CLIENT_ID = os.getenv("PAYPAL_CLIENT_ID")
     PAYPAL_SECRET = os.getenv("PAYPAL_SECRET")
-    PAYPAL_API = "https://api-m.sandbox.paypal.com"  # Sandbox endpoint
+    PAYPAL_API = os.getenv("PAYPAL_API_URL", "https://api-m.sandbox.paypal.com")
 
-    # 1. Ottenere access token PayPal
-    auth_response = requests.post(
-        f"{PAYPAL_API}/v1/oauth2/token",
-        auth=(PAYPAL_CLIENT_ID, PAYPAL_SECRET),
-        data={"grant_type": "client_credentials"}
-    )
-    auth_response.raise_for_status()
-    access_token = auth_response.json()["access_token"]
+    resp = requests.post(f"{PAYPAL_API}/v1/oauth2/token",
+                         auth=(PAYPAL_CLIENT_ID, PAYPAL_SECRET),
+                         data={"grant_type": "client_credentials"})
+    resp.raise_for_status()
+    access_token = resp.json()["access_token"]
 
-    # 2. Creare ordine PayPal
-    order_data = {
+    order = {
         "intent": "CAPTURE",
-        "purchase_units": [
-            {
-                "amount": {"currency_code": "USD", "value": f"{amount_usd:.2f}"},
-                "custom_id": request.session["user"]
-            }
-        ],
+        "purchase_units": [{
+            "amount": {"currency_code": "USD", "value": f"{amount_usd:.2f}"},
+            "custom_id": request.session.get("user")
+        }],
         "application_context": {
-            "return_url": "https://TUOSITO.IT/paypal-success",
-            "cancel_url": "https://TUOSITO.IT/paypal-cancel"
+            "return_url": os.getenv("PAYPAL_RETURN_URL"),
+            "cancel_url": os.getenv("PAYPAL_CANCEL_URL")
         }
     }
-    order_response = requests.post(
-        f"{PAYPAL_API}/v2/checkout/orders",
-        headers={"Content-Type": "application/json", "Authorization": f"Bearer {access_token}"},
-        json=order_data
-    )
-    order_response.raise_for_status()
-    order_info = order_response.json()
 
-    # 3. Restituire link di approvazione
-    approve_url = next(link["href"] for link in order_info["links"] if link["rel"] == "approve")
-    return RedirectResponse(url=approve_url)
+    pay_resp = requests.post(f"{PAYPAL_API}/v2/checkout/orders",
+                             headers={"Content-Type": "application/json", "Authorization": f"Bearer {access_token}"},
+                             json=order)
+    pay_resp.raise_for_status()
+    data = pay_resp.json()
 
-@app.post("/paypal-webhook")
+    for link in data.get("links", []):
+        if link["rel"] == "approve":
+            return {"redirect_url": link["href"]}
+    raise HTTPException(status_code=400, detail="PayPal order creation failed")
+
+@app.post("/paypal-webhook", response_model=dict)
 async def paypal_webhook(request: Request, db: Session = Depends(get_db)):
-    """
-    Riceve conferma pagamento PayPal e aggiorna AP + log donazione
-    """
-    data = await request.json()
+    event = await request.json()
+    if event.get("event_type") == "CHECKOUT.ORDER.APPROVED":
+        res = event["resource"]
+        txn_id = res.get("id")
+        amount_usd = float(res["purchase_units"][0]["amount"]["value"])
+        custom_id = res["purchase_units"][0].get("custom_id")
+        ap_amount = int(amount_usd * AP_RATE)
 
-    # Estrarre dati base
-    txn_id = data.get("resource", {}).get("id")
-    status = data.get("resource", {}).get("status")
-    custom_id = data.get("resource", {}).get("purchase_units", [{}])[0].get("custom_id")
-    amount_usd = float(data.get("resource", {}).get("purchase_units", [{}])[0].get("amount", {}).get("value", 0))
+        user = db.query(User).filter_by(UserID=custom_id).first()
+        if not user:
+            raise HTTPException(404, "User not found")
 
-    # Calcolo AP in base alla donazione
-    AP_RATE = 100  # Esempio: 100 AP per 1 USD
-    ap_amount = int(amount_usd * AP_RATE)
+        user.Point += ap_amount
+        donation = DonationLog(
+            UserUID=user.UserUID,
+            UserID=user.UserID,
+            AmountUSD=amount_usd,
+            APGranted=ap_amount,
+            PayPalTxnID=txn_id,
+            Status="COMPLETED"
+        )
+        db.add(donation)
+        db.commit()
 
-    # Recupero utente dal DB
-    user = db.execute("""
-        SELECT UserUID, UserID, Point FROM PS_UserData.dbo.Users_Master
-        WHERE UserID = :username
-    """, {"username": custom_id}).fetchone()
+    return {"status": "ok"}
 
-    if not user:
-        return {"status": "error", "message": "Utente non trovato"}
 
-    # Aggiornamento AP
-    db.execute("""
-        UPDATE PS_UserData.dbo.Users_Master
-        SET Point = Point + :ap
-        WHERE UserUID = :uid
-    """, {"ap": ap_amount, "uid": user.UserUID})
-
-    # Log transazione
-    donation = DonationLog(
-        UserUID=user.UserUID,
-        UserID=user.UserID,
-        AmountUSD=amount_usd,
-        APGranted=ap_amount,
-        PayPalTxnID=txn_id,
-        Status=status
-    )
-    db.add(donation)
-    db.commit()
-
-    return {"status": "success"}
