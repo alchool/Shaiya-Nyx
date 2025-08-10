@@ -1,3 +1,5 @@
+## SCRIPT DA ESEGUIRE SU SHELL
+
 ##Alembic Migration
 
 alembic revision --autogenerate -m "Add Donation_Log table"
