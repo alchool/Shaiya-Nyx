@@ -1,0 +1,15 @@
+# File essenziali (estratti)
+
+### File: requirements.txt
+fastapi
+uvicorn[standard]
+SQLAlchemy
+pydantic
+python-dotenv
+pyodbc
+passlib[bcrypt]
+python-jose[cryptography]
+alembic
+Jinja2
+requests
+stripe
