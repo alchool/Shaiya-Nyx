@@ -1,3 +1,8 @@
+##Ho usato {{ url_for('static', path='css/style.css') }} perché FastAPI con Jinja2 gestisce statici così.
+##I link di navigazione (url_for('register'), ecc.) vanno allineati alle route che creerai in main.py.
+##Ho previsto placeholder per messaggi di successo/errore usando le classi .alert-success e .alert-error già nel CSS.
+##{% block title %} e {% block content %} servono per personalizzare ogni pagina figlia.
+
 <!DOCTYPE html>
 <html lang="it">
 <head>
