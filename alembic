@@ -1,0 +1,6 @@
+##Alembic Migration
+
+alembic revision --autogenerate -m "Add Donation_Log table"
+alembic upgrade head
+
+##Controlla che il nuovo script includa la creazione della tabella Donation_Log con le colonne di models.py
