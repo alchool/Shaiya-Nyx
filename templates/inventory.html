@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block title %}Inventario{% endblock %}
+
+{% block content %}
+<h2>Inventario Personaggio</h2>
+<table>
+    <thead>
+        <tr>
+            <th>Slot</th>
+            <th>Item</th>
+            <th>Quantità</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in inventory %}
+        <tr>
+            <td>{{ item.slot }}</td>
+            <td>{{ item.name }}</td>
+            <td>{{ item.quantity }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}
