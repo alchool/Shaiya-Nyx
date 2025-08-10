@@ -1,0 +1,34 @@
+from sqlalchemy import Column, Integer, String, DateTime, Boolean
+from sqlalchemy.sql import func
+from .db import Base
+
+# Mappatura semplificata delle tabelle principali di Shaiya.
+class UserMaster(Base):
+    __tablename__ = 'Users_Master'  # verificare nome esatto nel vostro DB
+    UserNo = Column(Integer, primary_key=True, index=True)
+    UserID = Column(String(50), unique=True, index=True, nullable=False)
+    Pw = Column(String(255), nullable=False)
+    Email = Column(String(255))
+    Point = Column(Integer, default=0)  # AP
+    Status = Column(Integer, default=0)
+    RegDate = Column(DateTime, server_default=func.now())
+
+class Char(Base):
+    __tablename__ = 'Chars'  # verificare schema e nome
+    CharID = Column(Integer, primary_key=True)
+    UserNo = Column(Integer, index=True)
+    Name = Column(String(50), index=True)
+    Level = Column(Integer, default=1)
+    Exp = Column(Integer, default=0)
+    K1 = Column(Integer, default=0)
+    K2 = Column(Integer, default=0)
+    K3 = Column(Integer, default=0)
+    K4 = Column(Integer, default=0)
+
+class Inventory(Base):
+    __tablename__ = 'Inventory'
+    # struttura dipende dal vostro DB; adattare di conseguenza
+    InvID = Column(Integer, primary_key=True)
+    CharID = Column(Integer, index=True)
+    ItemID = Column(Integer)
+    Count = Column(Integer, default=1)
