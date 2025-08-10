@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}Shop In-Game{% endblock %}
+
+{% block content %}
+<h2>Negozio AP</h2>
+<table>
+    <thead>
+        <tr>
+            <th>Item</th>
+            <th>Descrizione</th>
+            <th>Prezzo (AP)</th>
+            <th>Acquista</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for product in shop_items %}
+        <tr>
+            <td>{{ product.name }}</td>
+            <td>{{ product.description }}</td>
+            <td>{{ product.price }}</td>
+            <td>
+                <form method="post" action="{{ url_for('buy_item') }}">
+                    <input type="hidden" name="item_id" value="{{ product.id }}">
+                    <button type="submit">Compra</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}
