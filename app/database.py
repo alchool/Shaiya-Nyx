@@ -29,3 +29,13 @@ def get_db():
         yield db
     finally:
         db.close()
+
+# Configurazione della connessione al database
+DATABASE_URL = os.getenv("DATABASE_URL", "mssql+pyodbc://username:password@localhost/PS_GameData?driver=ODBC+Driver+17+for+SQL+Server")
+
+# Creazione dell'engine e della sessione
+engine = create_engine(DATABASE_URL, echo=True)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+# Base per i modelli
+Base = declarative_base()
