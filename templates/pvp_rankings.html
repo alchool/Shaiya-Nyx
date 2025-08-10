@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}Classifica PvP{% endblock %}
+
+{% block content %}
+<h2>Classifica PvP</h2>
+<table>
+    <thead>
+        <tr>
+            <th>Posizione</th>
+            <th>Giocatore</th>
+            <th>Kill</th>
+            <th>Livello</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for rank in rankings %}
+        <tr>
+            <td>{{ loop.index }}</td>
+            <td>{{ rank.name }}</td>
+            <td>{{ rank.kills }}</td>
+            <td>{{ rank.level }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}
