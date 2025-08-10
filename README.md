@@ -38,5 +38,11 @@ shaiya-web-python/
 3. Installare dipendenze: `pip install -r requirements.txt`.
 4. Avviare: `uvicorn main:app --reload --host 0.0.0.0 --port 8000` (oppure usare `start.bat`).
 
+# NOTE DI SICUREZZA E INTEGRAZIONE
 
+- **Password:** se il database Shaiya originale memorizza password con un algoritmo diverso dal bcrypt, dovrete adattare la registrazione per creare password compatibili col server di gioco (oppure creare un processo che sincronizzi password con l'hash richiesto). Verificare la gestione `Pw` nella tabella `Users_Master` del vostro DB.
+- **Connessione al DB di gioco:** lavorare sempre su copia del DB per sviluppo. Evitare operazioni destructive in produzione.
+- **Webhooks di pagamento:** usare la verifica ufficiale dei provider (Stripe signature, PayPal IPN verify) prima di applicare AP.
+- **SQL injection:** usare sempre query parametrizzate (SQLAlchemy ORM + session) e non costruire stringhe SQL concatenate.
+- **HTTPS & CORS:** servire il sito via HTTPS e configurare CORS correttamente.
 
