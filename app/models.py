@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Float, ForeignKey
 from sqlalchemy.sql import func
 from .db import Base
 from .database import Base  # o come si chiama il file di base
@@ -25,7 +25,7 @@ class User(Base):
     Point = Column(Integer, default=0)
 
     # Relazioni (esempio, se necessario)
-    # donations = relationship("DonationLog", back_populates="user")
+    donations = relationship("DonationLog", back_populates="user")
 
 class Char(Base):
     __tablename__ = 'Chars'  # verificare schema e nome
@@ -59,3 +59,6 @@ class DonationLog(Base):
     PayPalTxnID = Column(String(255), nullable=False)
     Status = Column(String(50), nullable=False)
     CreatedAt = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Relazione con User
+    user = relationship("User", back_populates="donations")
