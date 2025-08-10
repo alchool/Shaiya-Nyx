@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}Profilo Utente{% endblock %}
+
+{% block content %}
+<h2>Profilo di {{ user.username }}</h2>
+
+<div class="profile-info">
+    <p><strong>Email:</strong> {{ user.email }}</p>
+    <p><strong>Kill PvP:</strong> {{ user.kills }}</p>
+    <p><strong>Exp Totale:</strong> {{ user.exp }}</p>
+    <p><strong>AP Disponibili:</strong> {{ user.ap }}</p>
+</div>
+
+<h3>Inventario Personaggio</h3>
+<table>
+    <thead>
+        <tr>
+            <th>Slot</th>
+            <th>Item</th>
+            <th>Quantità</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in inventory %}
+        <tr>
+            <td>{{ item.slot }}</td>
+            <td>{{ item.name }}</td>
+            <td>{{ item.quantity }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<h3>Azioni</h3>
+<ul>
+    <li><a href="{{ url_for('reset_password') }}">Reset Password</a></li>
+    <li><a href="{{ url_for('buy_ap') }}">Acquista AP</a></li>
+</ul>
+{% endblock %}
