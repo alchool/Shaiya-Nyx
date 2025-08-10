@@ -5,6 +5,10 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 import pyodbc
 import os
+import secrets
+import smtplib
+from email.mime.text import MIMEText
+from datetime import datetime, timedelta
 
 # -----------------------
 # CONFIGURAZIONE APP
@@ -85,6 +89,86 @@ def login(request: Request, username: str = Form(...), password: str = Form(...)
 def logout(request: Request):
     request.session.clear()
     return RedirectResponse(url="/", status_code=302)
+
+# Memoria temporanea per token reset
+reset_tokens = {}
+
+# -----------------------
+# RESET PASSWORD - STEP 1
+# -----------------------
+@app.get("/reset_password", response_class=HTMLResponse)
+def reset_password_form(request: Request):
+    return templates.TemplateResponse("reset_password.html", {"request": request})
+
+@app.post("/reset_password")
+def reset_password_request(email: str = Form(...)):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT UserID FROM PS_UserData.dbo.Users_Master WHERE Email=?
+    """, (email,))
+    user = cursor.fetchone()
+    cursor.close()
+    conn.close()
+
+    if not user:
+        return {"error": "Email non trovata"}
+
+    token = secrets.token_urlsafe(32)
+    expire_time = datetime.utcnow() + timedelta(hours=1)
+    reset_tokens[token] = {"user": user.UserID, "expire": expire_time}
+
+    reset_link = f"http://localhost:8000/reset_password_confirm?token={token}"
+    send_reset_email(email, reset_link)
+
+    return {"message": "Se l'email è corretta, riceverai un link per il reset."}
+
+# -----------------------
+# RESET PASSWORD - STEP 2
+# -----------------------
+@app.get("/reset_password_confirm", response_class=HTMLResponse)
+def reset_password_confirm(request: Request, token: str):
+    if token not in reset_tokens or datetime.utcnow() > reset_tokens[token]["expire"]:
+        return {"error": "Token scaduto o non valido"}
+    return templates.TemplateResponse("reset_password_confirm.html", {"request": request, "token": token})
+
+@app.post("/reset_password_confirm")
+def reset_password_update(token: str = Form(...), new_password: str = Form(...)):
+    if token not in reset_tokens or datetime.utcnow() > reset_tokens[token]["expire"]:
+        return {"error": "Token scaduto o non valido"}
+
+    username = reset_tokens[token]["user"]
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE PS_UserData.dbo.Users_Master SET Pw=? WHERE UserID=?
+    """, (new_password, username))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    del reset_tokens[token]
+    return RedirectResponse(url="/login", status_code=302)
+
+# -----------------------
+# FUNZIONE INVIO EMAIL
+# -----------------------
+def send_reset_email(to_email: str, reset_link: str):
+    smtp_server = os.getenv("SMTP_SERVER", "smtp.example.com")
+    smtp_port = int(os.getenv("SMTP_PORT", 587))
+    smtp_user = os.getenv("SMTP_USER", "noreply@example.com")
+    smtp_password = os.getenv("SMTP_PASSWORD", "password")
+
+    msg = MIMEText(f"Clicca qui per resettare la tua password: {reset_link}")
+    msg["Subject"] = "Reset Password - Shaiya Server"
+    msg["From"] = smtp_user
+    msg["To"] = to_email
+
+    with smtplib.SMTP(smtp_server, smtp_port) as server:
+        server.starttls()
+        server.login(smtp_user, smtp_password)
+        server.send_message(msg)
 
 # -----------------------
 # ROUTES PROTETTE
