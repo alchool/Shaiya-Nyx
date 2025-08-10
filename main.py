@@ -3,12 +3,15 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
+from email.mime.text import MIMEText
+from datetime import datetime, timedelta
+from fastapi import BackgroundTasks
+from sqlalchemy.orm import Session
+from models import DonationLog
 import pyodbc
 import os
 import secrets
 import smtplib
-from email.mime.text import MIMEText
-from datetime import datetime, timedelta
 
 # -----------------------
 # CONFIGURAZIONE APP
@@ -235,3 +238,99 @@ def inventory(request: Request, current_user: str = Depends(get_current_user)):
 @app.get("/shop", response_class=HTMLResponse)
 def shop(request: Request, current_user: str = Depends(get_current_user)):
     return templates.TemplateResponse("shop.html", {"request": request})
+
+@app.post("/donate")
+def donate(
+    request: Request,
+    amount_usd: float = Form(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Avvia pagamento PayPal sandbox e restituisce link approvazione
+    """
+    # Credenziali PayPal sandbox (variabili ambiente)
+    PAYPAL_CLIENT_ID = os.getenv("PAYPAL_CLIENT_ID")
+    PAYPAL_SECRET = os.getenv("PAYPAL_SECRET")
+    PAYPAL_API = "https://api-m.sandbox.paypal.com"  # Sandbox endpoint
+
+    # 1. Ottenere access token PayPal
+    auth_response = requests.post(
+        f"{PAYPAL_API}/v1/oauth2/token",
+        auth=(PAYPAL_CLIENT_ID, PAYPAL_SECRET),
+        data={"grant_type": "client_credentials"}
+    )
+    auth_response.raise_for_status()
+    access_token = auth_response.json()["access_token"]
+
+    # 2. Creare ordine PayPal
+    order_data = {
+        "intent": "CAPTURE",
+        "purchase_units": [
+            {
+                "amount": {"currency_code": "USD", "value": f"{amount_usd:.2f}"},
+                "custom_id": request.session["user"]
+            }
+        ],
+        "application_context": {
+            "return_url": "https://TUOSITO.IT/paypal-success",
+            "cancel_url": "https://TUOSITO.IT/paypal-cancel"
+        }
+    }
+    order_response = requests.post(
+        f"{PAYPAL_API}/v2/checkout/orders",
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {access_token}"},
+        json=order_data
+    )
+    order_response.raise_for_status()
+    order_info = order_response.json()
+
+    # 3. Restituire link di approvazione
+    approve_url = next(link["href"] for link in order_info["links"] if link["rel"] == "approve")
+    return RedirectResponse(url=approve_url)
+
+@app.post("/paypal-webhook")
+async def paypal_webhook(request: Request, db: Session = Depends(get_db)):
+    """
+    Riceve conferma pagamento PayPal e aggiorna AP + log donazione
+    """
+    data = await request.json()
+
+    # Estrarre dati base
+    txn_id = data.get("resource", {}).get("id")
+    status = data.get("resource", {}).get("status")
+    custom_id = data.get("resource", {}).get("purchase_units", [{}])[0].get("custom_id")
+    amount_usd = float(data.get("resource", {}).get("purchase_units", [{}])[0].get("amount", {}).get("value", 0))
+
+    # Calcolo AP in base alla donazione
+    AP_RATE = 100  # Esempio: 100 AP per 1 USD
+    ap_amount = int(amount_usd * AP_RATE)
+
+    # Recupero utente dal DB
+    user = db.execute("""
+        SELECT UserUID, UserID, Point FROM PS_UserData.dbo.Users_Master
+        WHERE UserID = :username
+    """, {"username": custom_id}).fetchone()
+
+    if not user:
+        return {"status": "error", "message": "Utente non trovato"}
+
+    # Aggiornamento AP
+    db.execute("""
+        UPDATE PS_UserData.dbo.Users_Master
+        SET Point = Point + :ap
+        WHERE UserUID = :uid
+    """, {"ap": ap_amount, "uid": user.UserUID})
+
+    # Log transazione
+    donation = DonationLog(
+        UserUID=user.UserUID,
+        UserID=user.UserID,
+        AmountUSD=amount_usd,
+        APGranted=ap_amount,
+        PayPalTxnID=txn_id,
+        Status=status
+    )
+    db.add(donation)
+    db.commit()
+
+    return {"status": "success"}
