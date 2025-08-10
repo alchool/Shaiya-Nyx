@@ -1,6 +1,7 @@
 from sqlalchemy import Column, Integer, String, DateTime, Boolean
 from sqlalchemy.sql import func
 from .db import Base
+from .database import Base  # o come si chiama il file di base
 
 # Mappatura semplificata delle tabelle principali di Shaiya.
 class UserMaster(Base):
@@ -32,3 +33,16 @@ class Inventory(Base):
     CharID = Column(Integer, index=True)
     ItemID = Column(Integer)
     Count = Column(Integer, default=1)
+
+class DonationLog(Base):
+    __tablename__ = "Donation_Log"
+    __table_args__ = {"schema": "dbo"}  # importante con SQL Server
+
+    ID = Column(Integer, primary_key=True, index=True)
+    UserUID = Column(Integer, nullable=False)
+    UserID = Column(String(50), nullable=False)
+    AmountUSD = Column(DECIMAL(10, 2), nullable=False)
+    APGranted = Column(Integer, nullable=False)
+    PayPalTxnID = Column(String(255), nullable=False)
+    Status = Column(String(50), nullable=False)
+    CreatedAt = Column(DateTime(timezone=True), server_default=func.now())
