@@ -17,7 +17,21 @@ services:
       - PAYPAL_CLIENT_SECRET=${PAYPAL_CLIENT_SECRET}
     depends_on:
       - db
-
+  frontend:
+     build:
+      context: .
+      dockerfile: 
+        Dockerfile.frontend
+     container_name: 
+       shaiya-frontend
+     depends_on: 
+       backend        # <-- usa il nome del tuo servizio FastAPI
+     ports: 
+       "8080:8080"    # Frontend raggiungibile su http://localhost:8080/
+     networks: 
+       shaiya         # <-- usa la rete già definita nel tuo compose, oppure shaiya:{}
+# Per sviluppo live senza rebuild, puoi scommentare:# volumes:#   - ./Frontend:/usr/share/nginx/html:ro#   - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    
   db:
     image: mcr.microsoft.com/mssql/server:2022-latest
     environment:
