@@ -3,13 +3,17 @@
 ### File: requirements.txt
 fastapi
 uvicorn[standard]
-SQLAlchemy
-pydantic
-python-dotenv
+SQLAlchemy>=2.0
 pyodbc
+pydantic>=2.0
+pydantic-settings
 passlib[bcrypt]
 python-jose[cryptography]
-alembic
 Jinja2
-requests
+email-validator
+httpx
 stripe
+paypalcheckoutsdk
+python-multipart
+pytest
+pytest-asyncio
