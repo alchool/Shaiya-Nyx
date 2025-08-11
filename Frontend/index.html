@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>Shaiya-Nyx Panel</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <h1>Shaiya-Nyx</h1>
+    </header>
+
+    <main>
+        <!-- LOGIN FORM -->
+        <section id="login-section">
+            <h2>Accesso Utente</h2>
+            <input type="text" id="username" placeholder="Username">
+            <input type="password" id="password" placeholder="Password">
+            <button id="login-btn">Login</button>
+            <p id="login-message"></p>
+        </section>
+
+        <!-- SERVER STATUS -->
+        <section id="status-section" class="hidden">
+            <h2>Stato Server</h2>
+            <div id="server-status"></div>
+        </section>
+
+        <!-- DONAZIONI -->
+        <section id="donation-section" class="hidden">
+            <h2>Supporta il server</h2>
+            <input type="number" id="donation-amount" placeholder="Importo in USD" value="5">
+            <button id="donate-btn">Dona con PayPal</button>
+        </section>
+    </main>
+
+    <footer>
+        <p>© 2025 Shaiya-Nyx</p>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+</html>
