@@ -6,22 +6,22 @@ from .database import Base  # o come si chiama il file di base
 # Mappatura semplificata delle tabelle principali di Shaiya.
 class UserMaster(Base):
     __tablename__ = 'Users_Master'  # verificare nome esatto nel vostro DB
-    UserNo = Column(Integer, primary_key=True, index=True)
+    UserUID = Column(Integer, primary_key=True, index=True)
     UserID = Column(String(50), unique=True, index=True, nullable=False)
     Pw = Column(String(255), nullable=False)
-    Email = Column(String(255))
+    Email = Column(String(255), unique=True, index=True)
     Point = Column(Integer, default=0)  # AP
     Status = Column(Integer, default=0)
     RegDate = Column(DateTime, server_default=func.now())
 
 class User(Base):
-    __tablename__ = 'Users_Master'
+    __tablename__ = 'Users'
     __table_args__ = {'schema': 'dbo'}
 
     UserUID = Column(Integer, primary_key=True, autoincrement=True)
     UserID = Column(String(50), unique=True, nullable=False)
     Pw = Column(String(255), nullable=False)
-    Email = Column(String(255), nullable=False)
+    Email = Column(String(255), nullable=False, unique=True, index=True)
     Point = Column(Integer, default=0)
 
     # Relazioni (esempio, se necessario)
