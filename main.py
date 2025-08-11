@@ -12,6 +12,7 @@ from email.mime.text import MIMEText
 from datetime import datetime, timedelta
 from fastapi import BackgroundTasks
 from sqlalchemy.orm import Session
+from app.db import SessionLocal
 from models import DonationLog, User # se User è definito
 from app import models, database
 import os, requests
@@ -48,13 +49,12 @@ templates = Jinja2Templates(directory="templates")
 # -----------------------
 # CONNESSIONE DB
 # -----------------------
-def get_db():
-    db = database.SessionLocal()
+def get_db(request: Request) -> Session:
+    db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
-
 # -----------------------
 # AUTENTICAZIONE
 # -----------------------
