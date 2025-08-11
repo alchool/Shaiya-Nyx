@@ -7,6 +7,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.routes import auth
+from app.payments import router as payments_router
 from email.mime.text import MIMEText
 from datetime import datetime, timedelta
 from fastapi import BackgroundTasks
@@ -33,6 +34,8 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+# Registro il router dei pagamenti senza prefisso o con prefisso a scelta (es: "/payments")
+app.include_router(payments_router)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
@@ -262,83 +265,6 @@ from .models import DonationLog, User  # se User è definito
 
 AP_RATE = int(os.getenv("AP_RATE", "100"))
 
-@app.post("/donate")
-def donate(
-    amount_usd: float = Form(...),
-    current_user: str = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    import requests
-    PAYPAL_CLIENT_ID = os.getenv("PAYPAL_CLIENT_ID")
-    PAYPAL_SECRET = os.getenv("PAYPAL_SECRET")
-    PAYPAL_API = "https://api-m.sandbox.paypal.com"
 
-    auth_response = requests.post(
-        f"{PAYPAL_API}/v1/oauth2/token",
-        auth=(PAYPAL_CLIENT_ID, PAYPAL_SECRET),
-        data={"grant_type": "client_credentials"}
-    )
-    auth_response.raise_for_status()
-    access_token = auth_response.json()["access_token"]
-
-    order_data = {
-        "intent": "CAPTURE",
-        "purchase_units": [
-            {
-                "amount": {"currency_code": "USD", "value": f"{amount_usd:.2f}"},
-                "custom_id": current_user
-            }
-        ],
-        "application_context": {
-            "return_url": "https://TUOSITO.IT/paypal-success",
-            "cancel_url": "https://TUOSITO.IT/paypal-cancel"
-        }
-    }
-    order_response = requests.post(
-        f"{PAYPAL_API}/v2/checkout/orders",
-        headers={"Content-Type": "application/json", "Authorization": f"Bearer {access_token}"},
-        json=order_data
-    )
-    order_response.raise_for_status()
-    order_info = order_response.json()
-
-    approve_url = next(link["href"] for link in order_info["links"] if link["rel"] == "approve")
-    return RedirectResponse(url=approve_url)
-
-@app.post("/paypal-webhook")
-async def paypal_webhook(request: Request, db: Session = Depends(get_db)):
-    data = await request.json()
-
-    resource = data.get("resource", {})
-    txn_id = resource.get("id")
-    status = resource.get("status")
-    purchase_units = resource.get("purchase_units", [])
-    custom_id = purchase_units[0].get("custom_id") if purchase_units else None
-    amount_usd = float(purchase_units[0].get("amount", {}).get("value", 0)) if purchase_units else 0
-
-    if not custom_id:
-        raise HTTPException(status_code=400, detail="Missing custom_id in webhook data")
-
-    AP_RATE = 100
-    ap_amount = int(amount_usd * AP_RATE)
-
-    user = db.query(models.User).filter(models.User.UserID == custom_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    user.Point = (user.Point or 0) + ap_amount
-
-    donation = models.DonationLog(
-        UserUID=user.UserUID,
-        AmountUSD=amount_usd,
-        APGranted=ap_amount,
-        PayPalTxnID=txn_id,
-        Status=status,
-        UserID=user.UserID
-    )
-    db.add(donation)
-    db.commit()
-
-    return {"status": "success"}
 
 
