@@ -6,7 +6,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
-from app.routes import auth
+from app.routes import auth, user
 from app.payments import router as payments_router
 from email.mime.text import MIMEText
 from datetime import datetime, timedelta
@@ -25,6 +25,8 @@ app = FastAPI()
 #app.add_middleware(SessionMiddleware, secret_key="CAMBIA_QUESTA_CHIAVE", max_age=3600)
 origins = [origin.strip() for origin in settings.CORS_ORIGINS.split(",")]
 
+# CORS
+origins = [origin.strip() for origin in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -36,6 +38,9 @@ app.add_middleware(
 app.include_router(auth.router)
 # Registro il router dei pagamenti senza prefisso o con prefisso a scelta (es: "/payments")
 app.include_router(payments_router) #potrebbe volere app.include_router(payments_router, prefix="/payments")
+app.include_router(auth.router, prefix="/auth", tags=["auth"])
+app.include_router(user.router, prefix="/user", tags=["user"])
+app.include_router(payments_router, prefix="/payments", tags=["payments"])
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
@@ -53,10 +58,13 @@ def get_db():
 # -----------------------
 # AUTENTICAZIONE
 # -----------------------
-def get_current_user(request: Request):
-    user = request.session.get("user")
+def get_current_user(request: Request, db=Depends(get_db)) -> User:
+    user_id = request.session.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    user = db.query(User).filter(User.UserUID == user_id).first()
     if not user:
-        raise HTTPException(status_code=status.HTTP_302_FOUND, headers={"Location": "/login"})
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     return user
 
 # -----------------------
