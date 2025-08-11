@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 from . import models, auth
+from app.models import User
 
 # Registrazione account
 def create_user(db: Session, username: str, password: str, email: str | None = None):
@@ -27,3 +28,7 @@ def get_top_pvp(db: Session, limit: int = 50):
 # Inventory
 def get_inventory_for_char(db: Session, char_id: int):
     return db.query(models.Inventory).filter(models.Inventory.CharID == char_id).all()
+
+#ottini utente
+def get_user_by_username(db: Session, username: str):
+    return db.query(User).filter(User.username == username).first()
