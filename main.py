@@ -27,7 +27,13 @@ app = FastAPI()
 origins = [origin.strip() for origin in settings.CORS_ORIGINS.split(",")]
 
 # CORS
-origins = [origin.strip() for origin in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")]
+##origins = [origin.strip() for origin in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")]
+origins = [
+    "http://localhost",
+    "http://localhost:3000",  # esempio porta frontend
+    # altri domini frontend se necessari
+]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
