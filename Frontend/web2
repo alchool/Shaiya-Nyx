@@ -1,0 +1,612 @@
+import React, { useEffect, useMemo, useState, createContext, useContext } from "react";
+import { BrowserRouter as Router, Routes, Route, Link, NavLink, useNavigate, Navigate } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
+import { Menu, Shield, Sword, Map as MapIcon, Download, LogIn, LogOut, UserPlus, Server, Crown, Users, Settings, Activity } import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+/**
+ * SHAIYA SERVER FRONTEND — Single-file, production-ready scaffold
+ * - Dark-fantasy aesthetic with Tailwind + shadcn/ui
+ * - Live panels wired to REST endpoints (status, rankings, map)
+ * - Download page pulling builds from API
+ * - JWT login/register with AuthContext, protected routes, refresh handling
+ * - Clean separation via a tiny API client in this file (swap BASE_URL below)
+ *
+ * ■ How to use
+ * 1) Ensure Tailwind + shadcn/ui + React Router + framer-motion are set up.
+ * 2) Set BASE_URL to your backend URL. Endpoints expected (customize easily):
+ * - GET /api/status -> { online: boolean, players: number, peak: number, channels: [{name, online}], uptime * - GET /api/rankings?limit=10 -> { pvp: [{name, class, kills, rank}], guilds: [{name, members, points}] }
+ * - GET /api/map -> { zones: [{name, owner, contested, bonuses: string[]}] }
+ * - GET /api/downloads -> { builds: [{id, label, platform, sizeMB, url, notes?}] }
+ * - POST /api/auth/login -> { accessToken, refreshToken, user: { id, name } }
+ * - POST /api/auth/register -> { accessToken, refreshToken, user: { id, name } }
+ * - POST /api/auth/refresh -> { accessToken }
+ * 3) Drop this component at your app root and remove your old router.
+ */
+// === CONFIG =====================================================================================
+const BASE_URL = import.meta?.env?.VITE_API_BASE_URL || ""; // e.g. "https://your-domain.com"
+const ENDPOINTS = {
+ status: "/api/status",
+ rankings: "/api/rankings",
+ map: "/api/map",
+ downloads: "/api/downloads",
+ login: "/api/auth/login",
+ register: "/api/auth/register",
+ refresh: "/api/auth/refresh",
+};
+// === TINY API CLIENT =========================================================================
+class ApiClient {
+ baseUrl: string;
+ getToken: () => string | null;
+ setToken: (t: string | null) => void;
+ getRefresh: () => string | null;
+ constructor(baseUrl: string, getToken: () => string | null, setToken: (t: string|null)=>void, getRefresh: ()=>string|null this.baseUrl = baseUrl;
+ this.getToken = getToken;
+ this.setToken = setToken;
+ this.getRefresh = getRefresh;
+ }
+ async fetch(input: string, init?: RequestInit, retry = true){
+ const url = (this.baseUrl || "") + input;
+ const headers: HeadersInit = { "Content-Type": "application/json", ...(init?.headers||{}) };
+ const token = this.getToken();
+ if (token) headers["Authorization"] = `Bearer ${token}`;
+ const res = await fetch(url, { ...init, headers });
+ if (res.status === 401 && retry && this.getRefresh()){
+ // try refresh
+ const ok = await this.refresh();
+ if (ok) return this.fetch(input, init, false);
+ }
+ if (!res.ok) throw new Error(await safeMessage(res));
+ return res.json();
+ }
+ async refresh(){
+ const refreshToken = this.getRefresh();
+ if (!refreshToken) return false;
+ try {
+ const res = await fetch((this.baseUrl||"") + ENDPOINTS.refresh, {
+ method: "POST",
+ headers: { "Content-Type": "application/json" },
+ body: JSON.stringify({ refreshToken })
+ });
+ if (!res.ok) return false;
+ const data = await res.json();
+ if (data?.accessToken){
+ this.setToken(data.accessToken);
+ return true;
+ }
+ return false;
+ } catch {
+ return false;
+ }
+ }
+}
+async function safeMessage(res: Response){
+ try { const j = await res.json(); return j?.message || res.statusText; } catch { return res.statusText; }
+}
+// === AUTH =====================================================================================
+interface User { id: string; name: string }
+interface AuthContextType {
+ user: User | null;
+ accessToken: string | null;
+ refreshToken: string | null;
+ login: (email: string, password: string) => Promise<void>;
+ register: (name: string, email: string, password: string) => Promise<void>;
+ logout: ()=>void;
+ api: ApiClient;
+}
+const AuthCtx = createContext<AuthContextType | null>(null);
+function useAuth(){
+ const ctx = useContext(AuthCtx);
+ if (!ctx) throw new Error("useAuth must be used within <AuthProvider>");
+ return ctx;
+}
+function AuthProvider({ children }: { children: React.ReactNode }){
+ const [accessToken, setAccessToken] = useState<string | null>(() => localStorage.getItem("shaiya_at"));
+ const [refreshToken, setRefreshToken] = useState<string | null>(() => localStorage.getItem("shaiya_rt"));
+ const [user, setUser] = useState<User | null>(() => {
+ const raw = localStorage.getItem("shaiya_user");
+ return raw ? JSON.parse(raw) : null;
+ });
+ const api = useMemo(() => new ApiClient(BASE_URL, () => accessToken, (t)=>{
+ if (t) localStorage.setItem("shaiya_at", t); else localStorage.removeItem("shaiya_at");
+ setAccessToken(t);
+ }, () => refreshToken), [accessToken, refreshToken]);
+ const login = async (email: string, password: string) => {
+ const data = await api.fetch(ENDPOINTS.login, { method: "POST", body: JSON.stringify({ email, password }) });
+ setAccessToken(data.accessToken);
+ setRefreshToken(data.refreshToken);
+ localStorage.setItem("shaiya_at", data.accessToken);
+ localStorage.setItem("shaiya_rt", data.refreshToken);
+ setUser(data.user);
+ localStorage.setItem("shaiya_user", JSON.stringify(data.user));
+ };
+ const register = async (name: string, email: string, password: string) => {
+ const data = await api.fetch(ENDPOINTS.register, { method: "POST", body: JSON.stringify({ name, email, password }) });
+ setAccessToken(data.accessToken);
+ setRefreshToken(data.refreshToken);
+ localStorage.setItem("shaiya_at", data.accessToken);
+ localStorage.setItem("shaiya_rt", data.refreshToken);
+ setUser(data.user);
+ localStorage.setItem("shaiya_user", JSON.stringify(data.user));
+ };
+ const logout = () => {
+ setAccessToken(null); setRefreshToken(null); setUser(null);
+ localStorage.removeItem("shaiya_at");
+ localStorage.removeItem("shaiya_rt");
+ localStorage.removeItem("shaiya_user");
+ };
+ const value: AuthContextType = { user, accessToken, refreshToken, login, register, logout, api };
+ return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>;
+}
+function Protected({ children }: { children: React.ReactNode }){
+ const { user } = useAuth();
+ return user ? <>{children}</> : <Navigate to="/login" replace />;
+}
+// === HOOKS for Panels =========================================================================
+function useServerStatus(){
+ const { api } = useAuth();
+ const [data, setData] = useState<any | null>(null);
+ const [error, setError] = useState<string | null>(null);
+ const [loading, setLoading] = useState(true);
+ useEffect(() => {
+ let mounted = true;
+ setLoading(true);
+ api.fetch(ENDPOINTS.status)
+ .then(d => { if(mounted){ setData(d); setError(null); }} )
+ .catch(e => setError(e.message))
+ .finally(()=> mounted && setLoading(false));
+ const t = setInterval(()=>{
+ api.fetch(ENDPOINTS.status).then(d=> mounted && setData(d)).catch(()=>{});
+ }, 15000);
+ return ()=>{ mounted=false; clearInterval(t); };
+ }, [api]);
+ return { data, error, loading };
+}
+function useRankings(){
+ const { api } = useAuth();
+ const [data, setData] = useState<any | null>(null);
+ const [error, setError] = useState<string | null>(null);
+ const [loading, setLoading] = useState(true);
+ useEffect(() => {
+ let mounted = true;
+ setLoading(true);
+ api.fetch(ENDPOINTS.rankings + "?limit=10")
+ .then(d => { if(mounted){ setData(d); setError(null); }})
+ .catch(e => setError(e.message))
+ .finally(()=> mounted && setLoading(false));
+ const t = setInterval(()=>{
+ api.fetch(ENDPOINTS.rankings + "?limit=10").then(d=> mounted && setData(d)).catch(()=>{});
+ }, 30000);
+ return ()=>{ mounted=false; clearInterval(t); };
+ }, [api]);
+ return { data, error, loading };
+}
+function useMapState(){
+ const { api } = useAuth();
+ const [data, setData] = useState<any | null>(null);
+ const [error, setError] = useState<string | null>(null);
+ const [loading, setLoading] = useState(true);
+ useEffect(() => {
+ let mounted = true;
+ setLoading(true);
+ api.fetch(ENDPOINTS.map)
+ .then(d => { if(mounted){ setData(d); setError(null); }})
+ .catch(e => setError(e.message))
+ .finally(()=> mounted && setLoading(false));
+ const t = setInterval(()=>{
+ api.fetch(ENDPOINTS.map).then(d=> mounted && setData(d)).catch(()=>{});
+ }, 45000);
+ return ()=>{ mounted=false; clearInterval(t); };
+ }, [api]);
+ return { data, error, loading };
+}
+function useDownloads(){
+ const { api } = useAuth();
+ const [data, setData] = useState<any | null>(null);
+ const [error, setError] = useState<string | null>(null);
+ const [loading, setLoading] = useState(true);
+ useEffect(() => {
+ let mounted = true;
+ setLoading(true);
+ api.fetch(ENDPOINTS.downloads)
+ .then(d => { if(mounted){ setData(d); setError(null); }})
+ .catch(e => setError(e.message))
+ .finally(()=> mounted && setLoading(false));
+ return ()=>{ mounted=false; };
+ }, [api]);
+ return { data, error, loading };
+}
+// === UI PRIMITIVES ============================================================================
+const sectionVariants = {
+ hidden: { opacity: 0, y: 10 },
+ show: { opacity: 1, y: 0 }
+};
+function StatChip({ label, value, icon: Icon }: { label: string; value: React.ReactNode; icon: any }){
+ return (
+ <div className="flex items-center gap-2 rounded-2xl border px-3 py-2 bg-background/60 backdrop-blur">
+ <Icon className="w-4 h-4" />
+ <div className="text-sm text-muted-foreground">{label}</div>
+ <div className="font-semibold">{value}</div>
+ </div>
+ );
+}
+function OnlineDot({ online }: { online: boolean }){
+ return <span className={`inline-block h-2.5 w-2.5 rounded-full ${online?"bg-emerald-500":"bg-rose-500"}`} />
+}
+// === PAGES =====================================================================================
+function HomePage(){
+ return (
+ <div className="space-y-10">
+ <Hero />
+ <LivePanels />
+ <CTASection />
+ </div>
+ );
+}
+function LivePanels(){
+ return (
+ <section className="container px-4 md:px-6">
+ <div className="grid md:grid-cols-3 gap-6">
+ <ServerStatusCard />
+ <RankingsCard />
+ <WarMapCard />
+ </div>
+ </section>
+ );
+}
+function ServerStatusCard(){
+ const { data, error, loading } = useServerStatus();
+ return (
+ <motion.div variants={sectionVariants} initial="hidden" whileInView="show" viewport={{ once: true }}>
+ <Card className="rounded-2xl shadow-sm border-foreground/10">
+ <CardHeader>
+ <CardTitle className="flex items-center gap-2"><Server className="w-5 h-5"/> Server Status</CardTitle>
+ <CardDescription>Ping live ogni 15s</CardDescription>
+ </CardHeader>
+ <CardContent>
+ {loading && <div className="text-sm text-muted-foreground">Caricamento…</div>}
+ {error && <div className="text-sm text-rose-500">{error}</div>}
+ {data && (
+ <div className="space-y-4">
+ <div className="flex items-center gap-3">
+ <OnlineDot online={!!data.online} />
+ <span className="text-sm">{data.online?"Online":"Offline"}</span>
+ <Badge variant={data.online?"default":"destructive"}>{data.players ?? 0} online</Badge>
+ <Badge variant="secondary">Peak {data.peak ?? 0}</Badge>
+ </div>
+ <div className="grid grid-cols-2 gap-2">
+ <StatChip label="Uptime" value={`${Math.floor((data.uptimeSeconds||0)/3600)}h`} icon={Activity} />
+ <StatChip label="Canali" value={data.channels?.length || 0} icon={Users} />
+ </div>
+ <div className="space-y-2">
+ <div className="text-xs text-muted-foreground">Canali</div>
+ <div className="flex flex-wrap gap-2">
+ {data.channels?.map((c:any)=> (
+ <Badge key={c.name} variant="outline" className="gap-2"><OnlineDot online={!!c.online}/>{c.name}</Badge ))}
+ </div>
+ </div>
+ </div>
+ )}
+ </CardContent>
+ </Card>
+ </motion.div>
+ );
+}
+function RankingsCard(){
+ const { data, error, loading } = useRankings();
+ return (
+ <motion.div variants={sectionVariants} initial="hidden" whileInView="show" viewport={{ once: true }}>
+ <Card className="rounded-2xl shadow-sm border-foreground/10">
+ <CardHeader>
+ <CardTitle className="flex items-center gap-2"><Crown className="w-5 h-5"/> Rankings</CardTitle>
+ <CardDescription>Aggiornati ogni 30s</CardDescription>
+ </CardHeader>
+ <CardContent>
+ {loading && <div className="text-sm text-muted-foreground">Caricamento…</div>}
+ {error && <div className="text-sm text-rose-500">{error}</div>}
+ {data && (
+ <Tabs defaultValue="pvp" className="w-full">
+ <TabsList className="grid grid-cols-2">
+ <TabsTrigger value="pvp">PvP</TabsTrigger>
+ <TabsTrigger value="guilds">Gilde</TabsTrigger>
+ </TabsList>
+ <TabsContent value="pvp">
+ <div className="space-y-2">
+ {data.pvp?.map((p:any, i:number)=>(
+ <div key={p.name+i} className="flex items-center justify-between rounded-xl border px-3 py-2">
+ <div className="flex items-center gap-3"><span className="text-muted-foreground w-6">#{i+1}</span><Sw <div className="text-sm">{p.kills} kills</div>
+ </div>
+ ))}
+ </div>
+ </TabsContent>
+ <TabsContent value="guilds">
+ <div className="space-y-2">
+ {data.guilds?.map((g:any,i:number)=>(
+ <div key={g.name+i} className="flex items-center justify-between rounded-xl border px-3 py-2">
+ <div className="flex items-center gap-3"><span className="text-muted-foreground w-6">#{i+1}</span><Sh <div className="text-sm flex items-center gap-3"><Badge variant="outline">{g.members} membri</Badge>< </div>
+ ))}
+ </div>
+ </TabsContent>
+ </Tabs>
+ )}
+ </CardContent>
+ </Card>
+ </motion.div>
+ );
+}
+function WarMapCard(){
+ const { data, error, loading } = useMapState();
+ return (
+ <motion.div variants={sectionVariants} initial="hidden" whileInView="show" viewport={{ once: true }}>
+ <Card className="rounded-2xl shadow-sm border-foreground/10">
+ <CardHeader>
+ <CardTitle className="flex items-center gap-2"><MapIcon className="w-5 h-5"/> Guerra delle Zone</CardTitle>
+ <CardDescription>Aggiornata ogni 45s</CardDescription>
+ </CardHeader>
+ <CardContent>
+ {loading && <div className="text-sm text-muted-foreground">Caricamento…</div>}
+ {error && <div className="text-sm text-rose-500">{error}</div>}
+ {data && (
+ <div className="space-y-2">
+ {data.zones?.map((z:any)=> (
+ <div key={z.name} className="rounded-xl border p-3">
+ <div className="flex items-center justify-between">
+ <div className="font-medium">{z.name}</div>
+ <Badge variant={z.contested?"destructive":"default"}>{z.contested?"Contesa":"Stabile"}</Badge>
+ </div>
+ <div className="text-xs text-muted-foreground">Controllo: {z.owner}</div>
+ {z.bonuses?.length>0 && (
+ <div className="mt-2 flex flex-wrap gap-2">
+ {z.bonuses.map((b:string)=>(<Badge key={b} variant="outline">{b}</Badge>))}
+ </div>
+ )}
+ </div>
+ ))}
+ </div>
+ )}
+ </CardContent>
+ </Card>
+ </motion.div>
+ );
+}
+function DownloadPage(){
+ const { data, error, loading } = useDownloads();
+ return (
+ <section className="container px-4 md:px-6 py-10 space-y-6">
+ <header className="space-y-2">
+ <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3"><Download className="w-7 h-7"/> Download< <p className="text-muted-foreground">Client ufficiali e patcher. Le firme e gli hash dovrebbero essere verificati p </header>
+ {loading && <div className="text-sm text-muted-foreground">Caricamento…</div>}
+ {error && <div className="text-sm text-rose-500">{error}</div>}
+ {data && (
+ <div className="grid md:grid-cols-2 gap-4">
+ {data.builds?.map((b:any)=> (
+ <Card key={b.id} className="rounded-2xl">
+ <CardHeader>
+ <CardTitle className="flex items-center gap-2">{b.label} <Badge variant="secondary">{b.platform}</Badge></C <CardDescription>{b.notes || ""}</CardDescription>
+ </CardHeader>
+ <CardContent className="flex items-center justify-between">
+ <div className="text-sm text-muted-foreground">~{b.sizeMB} MB</div>
+ <Button asChild><a href={b.url} target="_blank" rel="noreferrer">Scarica</a></Button>
+ </CardContent>
+ </Card>
+ ))}
+ </div>
+ )}
+ </section>
+ );
+}
+function LoginPage(){
+ const [tab, setTab] = useState<"login"|"register">("login");
+ return (
+ <section className="container px-4 md:px-6 py-10">
+ <Card className="max-w-md mx-auto rounded-2xl">
+ <CardHeader>
+ <CardTitle className="text-2xl">{tab === "login" ? "Accedi" : "Crea account"}</CardTitle>
+ <CardDescription>{tab === "login" ? "Bentornato/a su Shaiya." : "Unisciti ora al server."}</CardDescription>
+ </CardHeader>
+ <CardContent>
+ <Tabs value={tab} onValueChange={(v)=> setTab(v as any)} className="w-full">
+ <TabsList className="grid grid-cols-2 mb-4">
+ <TabsTrigger value="login">Login</TabsTrigger>
+ <TabsTrigger value="register">Registrati</TabsTrigger>
+ </TabsList>
+ <TabsContent value="login"><LoginForm /></TabsContent>
+ <TabsContent value="register"><RegisterForm onRegisteredSwitch={()=> setTab("login")} /></TabsContent>
+ </Tabs>
+ </CardContent>
+ </Card>
+ </section>
+ );
+}
+function LoginForm(){
+ const { login } = useAuth();
+ const nav = useNavigate();
+ const [email, setEmail] = useState("");
+ const [password, setPassword] = useState("");
+ const [loading, setLoading] = useState(false);
+ const [error, setError] = useState<string | null>(null);
+ return (
+ <form className="space-y-4" onSubmit={async (e)=>{e.preventDefault(); setLoading(true); setError(null); try { await log <div className="space-y-2">
+ <Label>Email</Label>
+ <Input type="email" value={email} onChange={(e)=> setEmail(e.target.value)} required />
+ </div>
+ <div className="space-y-2">
+ <Label>Password</Label>
+ <Input type="password" value={password} onChange={(e)=> setPassword(e.target.value)} required />
+ </div>
+ {error && <div className="text-sm text-rose-500">{error}</div>}
+ <Button type="submit" disabled={loading} className="w-full flex gap-2">{loading && <span className="animate-pulse">•< </form>
+ );
+}
+function RegisterForm({ onRegisteredSwitch }:{ onRegisteredSwitch?: ()=>void }){
+ const { register } = useAuth();
+ const nav = useNavigate();
+ const [name, setName] = useState("");
+ const [email, setEmail] = useState("");
+ const [password, setPassword] = useState("");
+ const [loading, setLoading] = useState(false);
+ const [error, setError] = useState<string | null>(null);
+ return (
+ <form className="space-y-4" onSubmit={async (e)=>{e.preventDefault(); setLoading(true); setError(null); try { await reg <div className="space-y-2">
+ <Label>Nickname</Label>
+ <Input value={name} onChange={(e)=> setName(e.target.value)} required />
+ </div>
+ <div className="space-y-2">
+ <Label>Email</Label>
+ <Input type="email" value={email} onChange={(e)=> setEmail(e.target.value)} required />
+ </div>
+ <div className="space-y-2">
+ <Label>Password</Label>
+ <Input type="password" value={password} onChange={(e)=> setPassword(e.target.value)} minLength={6} required />
+ </div>
+ {error && <div className="text-sm text-rose-500">{error}</div>}
+ <div className="flex gap-2">
+ <Button type="submit" disabled={loading} className="flex-1">Crea account</Button>
+ <Button type="button" variant="secondary" onClick={onRegisteredSwitch} className="flex items-center gap-2"><LogIn c </div>
+ </form>
+ );
+}
+function AccountPage(){
+ const { user, logout } = useAuth();
+ return (
+ <section className="container px-4 md:px-6 py-10 space-y-6">
+ <header className="flex items-center justify-between">
+ <div>
+ <h1 className="text-3xl font-bold">Account</h1>
+ <p className="text-muted-foreground">Gestisci il tuo profilo.</p>
+ </div>
+ <Button variant="outline" onClick={logout} className="gap-2"><LogOut className="w-4 h-4"/> Esci</Button>
+ </header>
+ <Card className="max-w-xl">
+ <CardHeader>
+ <CardTitle>Profilo</CardTitle>
+ <CardDescription>Informazioni base</CardDescription>
+ </CardHeader>
+ <CardContent>
+ {user ? (
+ <div className="space-y-1">
+ <div><span className="text-muted-foreground">ID:</span> {user.id}</div>
+ <div><span className="text-muted-foreground">Nickname:</span> {user.name}</div>
+ </div>
+ ): (
+ <div className="text-sm text-muted-foreground">Nessun utente</div>
+ )}
+ </CardContent>
+ </Card>
+ </section>
+ );
+}
+function Hero(){
+ return (
+ <section className="relative overflow-hidden">
+ <div className="absolute inset-0 -z-10 opacity-20 bg-[radial-gradient(ellipse_at_center,rgba(120,119,198,0.2),transpa <div className="container px-4 md:px-6 pt-12 pb-10">
+ <div className="grid md:grid-cols-2 gap-8 items-center">
+ <div className="space-y-6">
+ <motion.h1 initial={{opacity:0,y:10}} animate={{opacity:1,y:0}} transition={{duration:0.5}} className="text-4xl  <p className="text-muted-foreground">PvP feroce, mappe contese e build uniche. Un frontend leggero, connesso e p <div className="flex flex-wrap gap-3">
+ <Button asChild size="lg"><Link to="/download" className="gap-2"><Download className="w-4 h-4"/> Scarica</Lin <Button asChild variant="secondary" size="lg"><Link to="/login" className="gap-2"><LogIn className="w-4 h-4"/ </div>
+ </div>
+ <div className="relative">
+ <motion.div initial={{opacity:0,scale:0.98}} animate={{opacity:1,scale:1}} transition={{duration:0.6}} classNam <div className="grid grid-cols-3 gap-4">
+ <StatChip label="Server" value={<span className="flex items-center gap-2"><OnlineDot online={true}/> Online <StatChip label="PvP" value={<span>Top 10</span>} icon={Crown}/>
+ <StatChip label="Giocatori" value={<span>—</span>} icon={Users}/>
+ </div>
+ <div className="mt-6">
+ <LivePanels/>
+ </div>
+ </motion.div>
+ </div>
+ </div>
+ </div>
+ </section>
+ );
+}
+function CTASection(){
+ return (
+ <section className="container px-4 md:px-6 py-10">
+ <Card className="rounded-3xl border-dashed">
+ <CardContent className="py-8 flex flex-col md:flex-row items-center justify-between gap-6">
+ <div>
+ <h3 className="text-2xl font-bold">Pronto a combattere?</h3>
+ <p className="text-muted-foreground">Scarica il client e unisciti alla guerra eterna.</p>
+ </div>
+ <Button asChild size="lg"><Link to="/download" className="gap-2"><Download className="w-4 h-4"/> Download</Link>< </CardContent>
+ </Card>
+ </section>
+ );
+}
+function Navbar(){
+ const { user } = useAuth();
+ const [open, setOpen] = useState(false);
+ const navLink = "px-3 py-2 rounded-xl hover:bg-accent hover:text-accent-foreground transition";
+ return (
+ <header className="sticky top-0 z-50 border-b backdrop-blur bg-background/70">
+ <div className="container px-4 md:px-6 h-16 flex items-center justify-between">
+ <Link to="/" className="flex items-center gap-2 font-semibold"><Sword className="w-5 h-5"/> Shaiya</Link>
+ <nav className="hidden md:flex items-center gap-1">
+ <NavLink to="/" className={({isActive})=> `${navLink} ${isActive?"bg-accent text-accent-foreground":""}`}>Home</N <NavLink to="/download" className={({isActive})=> `${navLink} ${isActive?"bg-accent text-accent-foreground":""}`} <NavLink to="/account" className={({isActive})=> `${navLink} ${isActive?"bg-accent text-accent-foreground":""}`}>A </nav>
+ <div className="flex items-center gap-2">
+ {user ? (
+ <Badge variant="outline">{user.name}</Badge>
+ ) : (
+ <Button asChild variant="outline" className="gap-2"><Link to="/login"><LogIn className="w-4 h-4"/> Accedi</Link )}
+ <Button variant="ghost" size="icon" className="md:hidden" onClick={()=> setOpen(v=>!v)}><Menu className="w-5 h-5" </div>
+ </div>
+ <AnimatePresence>
+ {open && (
+ <motion.div initial={{height:0}} animate={{height: "auto"}} exit={{height:0}} className="md:hidden border-t">
+ <div className="container px-4 py-3 flex flex-col gap-2">
+ <Link onClick={()=> setOpen(false)} to="/" className={navLink}>Home</Link>
+ <Link onClick={()=> setOpen(false)} to="/download" className={navLink}>Download</Link>
+ <Link onClick={()=> setOpen(false)} to="/account" className={navLink}>Account</Link>
+ </div>
+ </motion.div>
+ )}
+ </AnimatePresence>
+ </header>
+ );
+}
+function Footer(){
+ return (
+ <footer className="border-t mt-10">
+ <div className="container px-4 md:px-6 py-8 text-sm text-muted-foreground flex flex-col md:flex-row items-center just <div>© {new Date().getFullYear()} Shaiya Server — Tutti i diritti riservati.</div>
+ <div className="flex items-center gap-3">
+ <Link to="/rules" className="hover:underline">Regole</Link>
+ <Link to="/faq" className="hover:underline">FAQ</Link>
+ <Link to="/privacy" className="hover:underline">Privacy</Link>
+ </div>
+ </div>
+ </footer>
+ );
+}
+// === ROOT APP ================================================================================
+export default function App(){
+ return (
+ <AuthProvider>
+ <Router>
+ <div className="min-h-screen bg-gradient-to-b from-background to-background/80 text-foreground">
+ <Navbar />
+ <Routes>
+ <Route path="/" element={<HomePage />} />
+ <Route path="/download" element={<DownloadPage />} />
+ <Route path="/login" element={<LoginPage />} />
+ <Route path="/account" element={<Protected><AccountPage /></Protected>} />
+ <Route path="*" element={<NotFound />} />
+ </Routes>
+ <Footer />
+ </div>
+ </Router>
+ </AuthProvider>
+ );
+}
+function NotFound(){
+ return (
+ <section className="container px-4 md:px-6 py-16 text-center space-y-4">
+ <h1 className="text-4xl font-bold">404</h1>
+ <p className="text-muted-foreground">Pagina non trovata.</p>
+ <Button asChild><Link to="/">Torna alla Home</Link></Button>
+ </section>
+ );
+}
