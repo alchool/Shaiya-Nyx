@@ -35,7 +35,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 # Registro il router dei pagamenti senza prefisso o con prefisso a scelta (es: "/payments")
-app.include_router(payments_router)
+app.include_router(payments_router) #potrebbe volere app.include_router(payments_router, prefix="/payments")
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
