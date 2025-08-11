@@ -101,23 +101,32 @@ def register_post(username: str = Form(...), password: str = Form(...), email: s
 def login_form(request: Request):
     return templates.TemplateResponse("login.html", {"request": request})
 
-@app.post("/login")
-def login(request: Request, username: str = Form(...), password: str = Form(...)):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT UserID FROM PS_UserData.dbo.Users_Master
-        WHERE UserID=? AND Pw=?
-    """, (username, password))
-    user = cursor.fetchone()
-    cursor.close()
-    conn.close()
+#@app.post("/login")
+#def login(request: Request, username: str = Form(...), password: str = Form(...)):
+#    conn = get_db_connection()
+#    cursor = conn.cursor()
+#    cursor.execute("""
+#        SELECT UserID FROM PS_UserData.dbo.Users_Master
+#        WHERE UserID=? AND Pw=?
+#    """, (username, password))
+#    user = cursor.fetchone()
+#    cursor.close()
+#    conn.close()
+#    if user:
+#        request.session["user"] = username
+#        return RedirectResponse(url="/profile", status_code=302)
+#    else:
+#        return templates.TemplateResponse("login.html", {"request": request, "error": "Credenziali non valide"})
+ @app.post("/login")
+def login(request: Request, response: Response, username: str = Form(...), password: str = Form(...), db=Depends(get_db)):
+    user = db.query(User).filter(User.UserID == username, User.Pw == password).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Credenziali non valide")
 
-    if user:
-        request.session["user"] = username
-        return RedirectResponse(url="/profile", status_code=302)
-    else:
-        return templates.TemplateResponse("login.html", {"request": request, "error": "Credenziali non valide"})
+    # Crea sessione, salva username (ad es. con SessionMiddleware)
+    request.session["user"] = user.UserID
+    
+    return {"message": "Login riuscito", "username": user.UserID}          
 
 @app.get("/logout")
 def logout(request: Request):
