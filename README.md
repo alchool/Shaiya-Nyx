@@ -1,6 +1,34 @@
 # Shaiya-Nyx
 struttura di progetto completa (back-end in Python) per integrare un sito web con il database di Shaiya Essentials (MS SQL), includendo: registrazione account, login/profilo, classifiche PvP/EXP, visualizzazione inventario/PG, shop/donazioni (AP), e sistema ticket.
 
+Dipendenze principali
+main.py (file principale) dipende da:
+app/routes/auth.py e user.py (importati come router)
+app/config.py (per le impostazioni)
+app/payments.py (router pagamenti)
+app/db.py (per SessionLocal)
+models.py (per DonationLog e User)
+templates/*.html (per il rendering delle pagine)
+app/config.py gestisce:
+Variabili d'ambiente dal file .env
+Configurazioni globali usate in altri moduli
+app/db.py e database.py gestiscono:
+Connessione database
+Sessioni SQLAlchemy
+Usati da quasi tutti i moduli che necessitano accesso DB
+app/routes/ contiene i router che dipendono da:
+app/models.py (definizioni modelli DB)
+app/schemas.py (Pydantic models)
+app/deps.py (dipendenze comuni)
+app/crud.py (operazioni DB)
+templates/ dipende da:
+base.html (template base ereditato dagli altri)
+File statici (CSS/JS)
+Frontend/ dipende da:
+app.js (logica frontend)
+style.css (stili)
+API esposte dal backend
+
 # ALBERO DEL PROGETTO
 Backend in Python: Utilizza FastAPI per la gestione delle rotte e SQLAlchemy per l'interazione con il database.
 
