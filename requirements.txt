@@ -13,7 +13,7 @@ Jinja2
 email-validator
 httpx
 stripe
-paypalcheckoutsdk
+paypal-checkout-serversdk
 python-multipart
 pytest
 pytest-asyncio
